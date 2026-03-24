@@ -93,15 +93,10 @@ func (f *File) getBuffer() (b *streambuf.Buffer, err error) {
 		return f.b, nil
 	}
 
-	f.b, err = streambuf.New(filepath.Join(f.dir, f.key))
+	f.b, err = streambuf.New(f.filepath())
 	return f.b, err
 }
 
 func (f *File) filepath() (out string) {
 	return filepath.Join(f.dir, f.key)
-}
-
-// String returns the file key.
-func (f *File) String() string {
-	return f.key
 }
