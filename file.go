@@ -10,10 +10,10 @@ import (
 	"github.com/itsmontoya/streambuf"
 )
 
-func newFile(dir string, e os.DirEntry) (out *File) {
+func newFile(dir, name string) (out *File) {
 	var f File
 	f.dir = dir
-	f.key = e.Name()
+	f.key = name
 	return &f
 }
 
@@ -74,6 +74,10 @@ func (f *File) updateFromTemp(tempPath string) (err error) {
 	f.tmux.Lock()
 	defer f.tmux.Unlock()
 	if err = os.Rename(tempPath, f.filepath()); err != nil {
+		return err
+	}
+
+	if err = syncDir(f.dir); err != nil {
 		return err
 	}
 
