@@ -25,19 +25,19 @@ type File struct {
 	// Transaction mutex, used to guard stream initialization and writes
 	tmux sync.Mutex
 
-	s *streambuf.Stream
+	b *streambuf.Buffer
 }
 
 // Read opens a reader for the file and passes it to fn.
 // The reader is closed after fn returns.
 func (f *File) Read(fn func(io.Reader) error) (err error) {
-	var s *streambuf.Stream
-	if s, err = f.getStream(); err != nil {
+	var b *streambuf.Buffer
+	if b, err = f.getBuffer(); err != nil {
 		return
 	}
 
 	var rc io.ReadCloser
-	if rc, err = s.Reader(); err != nil {
+	if rc, err = b.Reader(); err != nil {
 		return
 	}
 	defer rc.Close()
@@ -58,6 +58,19 @@ func (f *File) Update(fn func(io.Writer) error) (err error) {
 	return nil
 }
 
+func (f *File) Append(fn func(io.Writer) error) (err error) {
+	var b *streambuf.Buffer
+	if b, err = f.getBuffer(); err != nil {
+		return err
+	}
+
+	if err = fn(b); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (f *File) updateFromTemp(tempPath string) (err error) {
 	f.tmux.Lock()
 	defer f.tmux.Unlock()
@@ -65,23 +78,23 @@ func (f *File) updateFromTemp(tempPath string) (err error) {
 		return err
 	}
 
-	if f.s != nil {
-		go f.s.CloseAndWait(context.Background())
-		f.s = nil
+	if f.b != nil {
+		go f.b.CloseAndWait(context.Background())
+		f.b = nil
 	}
 
 	return nil
 }
 
-func (f *File) getStream() (s *streambuf.Stream, err error) {
+func (f *File) getBuffer() (b *streambuf.Buffer, err error) {
 	f.tmux.Lock()
 	defer f.tmux.Unlock()
-	if f.s != nil {
-		return f.s, nil
+	if f.b != nil {
+		return f.b, nil
 	}
 
-	f.s, err = streambuf.NewStream(filepath.Join(f.dir, f.key))
-	return f.s, err
+	f.b, err = streambuf.New(filepath.Join(f.dir, f.key))
+	return f.b, err
 }
 
 func (f *File) filepath() (out string) {
