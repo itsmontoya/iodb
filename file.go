@@ -10,9 +10,8 @@ import (
 	"github.com/itsmontoya/streambuf"
 )
 
-func newFile(dbPath, dir string, e os.DirEntry) (out *File) {
+func newFile(dir string, e os.DirEntry) (out *File) {
 	var f File
-	f.dbPath = dbPath
 	f.dir = dir
 	f.key = e.Name()
 	return &f
@@ -47,7 +46,7 @@ func (f *File) Read(fn func(io.Reader) error) (err error) {
 // Update writes file contents through fn and atomically replaces the file.
 func (f *File) Update(fn func(io.Writer) error) (err error) {
 	var tempFilepath string
-	if tempFilepath, err = tempFile(f.dbPath, fn); err != nil {
+	if tempFilepath, err = tempFile(f.filepath(), fn); err != nil {
 		return err
 	}
 
