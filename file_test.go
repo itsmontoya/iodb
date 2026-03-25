@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/itsmontoya/streambuf"
 )
@@ -628,6 +629,207 @@ func TestFileAppend(t *testing.T) {
 	}
 }
 
+// These are behavior/contract tests (instead of strict unit tests) because they
+// intentionally coordinate goroutines and depend on streambuf v0.7.0 close
+// semantics under concurrent access.
+func TestFileConcurrentUpdateContracts(t *testing.T) {
+	t.Run("append that captured old buffer can observe ErrIsClosed after update rotation", func(t *testing.T) {
+		var (
+			f           = newTestFile(t, "concurrent_append.txt", "before")
+			appendErrCh = make(chan error, 1)
+			cbStarted   = make(chan struct{})
+			releaseCB   = make(chan struct{})
+			updateErr   error
+			appendErr   error
+		)
+
+		go func() {
+			appendErrCh <- f.Append(func(w io.Writer) (err error) {
+				var (
+					timeout = time.After(2 * time.Second)
+				)
+
+				close(cbStarted)
+				<-releaseCB
+
+				for {
+					_, err = w.Write([]byte("x"))
+					if errors.Is(err, streambuf.ErrIsClosed) {
+						return err
+					}
+
+					if err != nil {
+						return err
+					}
+
+					select {
+					case <-timeout:
+						return errors.New("append callback timed out waiting for closed buffer")
+					default:
+						time.Sleep(2 * time.Millisecond)
+					}
+				}
+			})
+		}()
+
+		<-cbStarted
+
+		updateErr = f.Update(func(w io.Writer) (err error) {
+			_, err = w.Write([]byte("after"))
+			return err
+		})
+		if updateErr != nil {
+			t.Fatalf("Update() error = %v", updateErr)
+		}
+
+		close(releaseCB)
+
+		appendErr = <-appendErrCh
+		if !errors.Is(appendErr, streambuf.ErrIsClosed) {
+			t.Fatalf("Append() error = %v, want %v", appendErr, streambuf.ErrIsClosed)
+		}
+	})
+
+	t.Run("update returns before old CloseAndWait completes and new ops see updated buffer", func(t *testing.T) {
+		var (
+			f       = newTestFile(t, "concurrent_update_return.txt", "before")
+			oldBuf  *streambuf.Buffer
+			oldRead io.ReadCloser
+			err     error
+		)
+
+		if oldBuf, err = f.getBuffer(); err != nil {
+			t.Fatalf("getBuffer() error = %v", err)
+		}
+
+		if oldRead, err = oldBuf.Reader(); err != nil {
+			t.Fatalf("old buffer Reader() error = %v", err)
+		}
+		defer oldRead.Close()
+
+		done := make(chan error, 1)
+		go func() {
+			done <- f.Update(func(w io.Writer) (err error) {
+				_, err = w.Write([]byte("after"))
+				return err
+			})
+		}()
+
+		select {
+		case err = <-done:
+			if err != nil {
+				t.Fatalf("Update() error = %v", err)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("Update() did not return while old reader remained open")
+		}
+
+		if err = assertFileReadContent(f, "after"); err != nil {
+			t.Fatalf("post-Update Read() content assertion error = %v", err)
+		}
+
+		if err = f.Append(func(w io.Writer) (err error) {
+			_, err = w.Write([]byte("-next"))
+			return err
+		}); err != nil {
+			t.Fatalf("post-Update Append() error = %v", err)
+		}
+
+		if err = assertFileReadContent(f, "after-next"); err != nil {
+			t.Fatalf("post-Append Read() content assertion error = %v", err)
+		}
+	})
+
+	t.Run("active non-streaming reader can drain old buffer bytes during update rotation", func(t *testing.T) {
+		var (
+			f       = newTestFile(t, "concurrent_reader_drain.txt", "before")
+			oldBuf  *streambuf.Buffer
+			oldRead io.ReadCloser
+			got     string
+			err     error
+		)
+
+		if oldBuf, err = f.getBuffer(); err != nil {
+			t.Fatalf("getBuffer() error = %v", err)
+		}
+
+		if oldRead, err = oldBuf.Reader(); err != nil {
+			t.Fatalf("old buffer Reader() error = %v", err)
+		}
+		defer oldRead.Close()
+
+		if err = f.Update(func(w io.Writer) (err error) {
+			_, err = w.Write([]byte("after"))
+			return err
+		}); err != nil {
+			t.Fatalf("Update() error = %v", err)
+		}
+
+		if got, err = readAllAllowClosed(oldRead); err != nil {
+			t.Fatalf("drain old reader error = %v", err)
+		}
+
+		if got != "before" {
+			t.Fatalf("old reader drained %q, want %q", got, "before")
+		}
+	})
+}
+
+// Contract test pinned to streambuf v0.7.0: close initiation should unblock a
+// waiting streaming read with ErrIsClosed, and subsequent writes/new readers are
+// rejected with ErrIsClosed.
+func TestStreambufV070CloseInitiationContract(t *testing.T) {
+	var (
+		b         = streambuf.NewMemory()
+		r         io.ReadSeekCloser
+		readErrCh = make(chan error, 1)
+		closeErr  error
+		writeErr  error
+		readerErr error
+		streamErr error
+	)
+
+	if r, closeErr = b.StreamingReader(); closeErr != nil {
+		t.Fatalf("StreamingReader() setup error = %v", closeErr)
+	}
+	defer r.Close()
+
+	go func() {
+		var (
+			buf = make([]byte, 1)
+			err error
+		)
+		_, err = r.Read(buf)
+		readErrCh <- err
+	}()
+
+	if closeErr = b.Close(); closeErr != nil {
+		t.Fatalf("Close() error = %v", closeErr)
+	}
+
+	select {
+	case err := <-readErrCh:
+		if !errors.Is(err, streambuf.ErrIsClosed) {
+			t.Fatalf("streaming read error = %v, want %v", err, streambuf.ErrIsClosed)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("streaming read did not unblock after Close()")
+	}
+
+	_, writeErr = b.Write([]byte("x"))
+	if !errors.Is(writeErr, streambuf.ErrIsClosed) {
+		t.Fatalf("Write() error = %v, want %v", writeErr, streambuf.ErrIsClosed)
+	}
+
+	if _, readerErr = b.Reader(); !errors.Is(readerErr, streambuf.ErrIsClosed) {
+		t.Fatalf("Reader() error = %v, want %v", readerErr, streambuf.ErrIsClosed)
+	}
+
+	if _, streamErr = b.StreamingReader(); !errors.Is(streamErr, streambuf.ErrIsClosed) {
+		t.Fatalf("StreamingReader() error = %v, want %v", streamErr, streambuf.ErrIsClosed)
+	}
+}
+
 func assertFileReadContent(f *File, want string) (err error) {
 	err = f.Read(func(r io.Reader) (err error) {
 		var b []byte
@@ -685,6 +887,34 @@ func readAllAllowWrappedEOF(r io.Reader) (out []byte, err error) {
 			}
 
 			return nil, err
+		}
+	}
+}
+
+func readAllAllowClosed(r io.Reader) (out string, err error) {
+	var (
+		b   bytes.Buffer
+		buf = make([]byte, 256)
+		n   int
+	)
+
+	for {
+		n, err = r.Read(buf)
+		if n > 0 {
+			if _, err = b.Write(buf[:n]); err != nil {
+				return "", err
+			}
+		}
+
+		if err != nil {
+			switch {
+			case errors.Is(err, io.EOF):
+				return b.String(), nil
+			case errors.Is(err, streambuf.ErrIsClosed):
+				return b.String(), nil
+			default:
+				return "", err
+			}
 		}
 	}
 }
