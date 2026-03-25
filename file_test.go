@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"testing"
@@ -12,6 +14,8 @@ import (
 
 	"github.com/itsmontoya/streambuf"
 )
+
+var exampleFile *File
 
 func TestFileKey(t *testing.T) {
 	tests := []struct {
@@ -917,4 +921,48 @@ func readAllAllowClosed(r io.Reader) (out string, err error) {
 			}
 		}
 	}
+}
+
+func ExampleFile_Read() {
+	var err error
+	if err = exampleFile.Read(func(r io.Reader) (err error) {
+		return nil
+	}); err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println("Read success")
+}
+
+func ExampleFile_StreamingRead() {
+	var err error
+	if err = exampleFile.StreamingRead(context.Background(), func(r io.Reader) (err error) {
+		return nil
+	}); err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println("StreamingRead success")
+}
+
+func ExampleFile_Update() {
+	var err error
+	if err = exampleFile.Update(func(w io.Writer) (err error) {
+		return nil
+	}); err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println("Update success")
+}
+
+func ExampleFile_Append() {
+	var err error
+	if err = exampleFile.Append(func(w io.Writer) (err error) {
+		return nil
+	}); err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println("Append success")
 }
