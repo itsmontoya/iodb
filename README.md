@@ -8,6 +8,7 @@
 [Report Card Badge]: https://goreportcard.com/badge/github.com/itsmontoya/iodb
 [Report Card URL]: https://goreportcard.com/report/github.com/itsmontoya/iodb
 
+![banner](https://res.cloudinary.com/dryepxxoy/image/upload/v1774419437/iodb_banner_1920_df41k7.webp "IODB banner")
 
 A lightweight, file-system-backed key/value store for Go.
 
@@ -276,3 +277,4 @@ These boundaries are enforced in `AGENTS.md` and are part of this repository's c
 
 [MIT](./LICENSE)
 
+![footer](https://res.cloudinary.com/dryepxxoy/image/upload/v1774419437/iodb_footer_1920_m6dq1i.webp "IODB footer")
