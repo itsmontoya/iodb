@@ -27,8 +27,13 @@ type File struct {
 	b *streambuf.Buffer
 }
 
-// Read opens a reader for the file and passes it to fn.
-// The reader is closed after fn returns.
+// Read opens a non-streaming reader for the current stream buffer and passes it
+// to fn. The reader is closed after fn returns.
+//
+// If Read acquires a reader before or during Update, it may continue reading
+// from the previous buffer.
+//
+// Reads that start after Update returns observe the updated file contents.
 func (f *File) Read(fn func(io.Reader) error) (err error) {
 	var b *streambuf.Buffer
 	if b, err = f.getBuffer(); err != nil {
@@ -44,6 +49,19 @@ func (f *File) Read(fn func(io.Reader) error) (err error) {
 }
 
 // Update writes file contents through fn and atomically replaces the file.
+//
+// Update replaces the on-disk file via rename, syncs the parent directory for
+// durability, then rotates the in-memory stream buffer.
+//
+// While rotation is in progress, in-flight readers on the previous buffer
+// continue using that buffer. Non-streaming readers drain available bytes and
+// then reach EOF-equivalent behavior, while streaming readers unblock and end
+// according to streambuf close semantics. Appends using a buffer being closed
+// may fail with streambuf.ErrIsClosed.
+//
+// On successful return from Update, newly started Read and StreamingRead calls
+// observe updated contents. In-flight reads and appends may still complete
+// against the previous buffer according to streambuf close semantics.
 func (f *File) Update(fn func(io.Writer) error) (err error) {
 	var tempFilepath string
 	if tempFilepath, err = tempFile(f.filepath(), fn); err != nil {
@@ -57,6 +75,10 @@ func (f *File) Update(fn func(io.Writer) error) (err error) {
 	return nil
 }
 
+// Append writes to the current stream buffer via fn.
+//
+// During a concurrent Update, append operations may fail with
+// streambuf.ErrIsClosed if they target a buffer being rotated out.
 func (f *File) Append(fn func(io.Writer) error) (err error) {
 	var b *streambuf.Buffer
 	if b, err = f.getBuffer(); err != nil {
