@@ -2,11 +2,15 @@ package iodb
 
 import (
 	"errors"
+	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
 )
+
+var exampleBucket *Bucket
 
 func TestNewBucket(t *testing.T) {
 	tests := []struct {
@@ -745,4 +749,82 @@ func withFiles(entries map[string]string) func(t *testing.T, bucketDir string) {
 			}
 		}
 	}
+}
+
+func ExampleBucket_GetBucket() {
+	var (
+		b  *Bucket
+		ok bool
+	)
+
+	if b, ok = exampleBucket.GetBucket("my_bucket"); ok {
+		log.Fatalf("my_bucket not found")
+	}
+
+	fmt.Println("Bucket", b)
+}
+
+func ExampleBucket_CreateBucket() {
+	var (
+		b   *Bucket
+		err error
+	)
+
+	if b, err = exampleBucket.CreateBucket("my_bucket"); err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println("Bucket", b)
+}
+
+func ExampleBucket_GetOrCreateBucket() {
+	var (
+		b   *Bucket
+		err error
+	)
+
+	if b, err = exampleBucket.GetOrCreateBucket("my_bucket"); err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println("Bucket", b)
+}
+
+func ExampleBucket_Get() {
+	var (
+		f  *File
+		ok bool
+	)
+
+	if f, ok = exampleBucket.Get("my_file"); ok {
+		log.Fatalf("my_file not found")
+	}
+
+	fmt.Println("File", f)
+}
+
+func ExampleBucket_Create() {
+	var (
+		f   *File
+		err error
+	)
+
+	if f, err = exampleBucket.Create("my_file"); err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println("File", f)
+}
+
+func ExampleBucket_GetOrCreate() {
+	var (
+		f   *File
+		err error
+	)
+
+	if f, err = exampleBucket.GetOrCreate("my_file"); err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println("File", f)
 }

@@ -11,90 +11,172 @@ It is useful when you want simple persistent storage without running a separate 
 
 Under the hood, `iodb` uses [`streambuf`](https://github.com/itsmontoya/streambuf) for file read/write behavior.
 
-## Install
+- Independent readers with their own cursors
+- Tail-style streaming reads (`StreamingRead`)
+- Safe concurrent append and read coordination
 
-```bash
-go get github.com/itsmontoya/iodb
+## Examples
+### New
+```go
+func ExampleNew() {
+	var err error
+	if exampleDB, err = New("path/to/dir"); err != nil {
+		log.Fatal(err)
+	}
+}
 ```
 
-## Requirements
-
-- Go `1.25.3+` (per `go.mod`)
-
-## Quick Start
-
+### Bucket
+#### GetBucket
 ```go
-package main
-
-import (
-	"context"
-	"fmt"
-	"io"
-	"log"
-	"time"
-
-	"github.com/itsmontoya/iodb"
-)
-
-func main() {
+func ExampleBucket_GetBucket() {
 	var (
-		db  *iodb.DB
+		b  *Bucket
+		ok bool
+	)
+
+	if b, ok = exampleBucket.GetBucket("my_bucket"); ok {
+		log.Fatalf("my_bucket not found")
+	}
+
+	fmt.Println("Bucket", b)
+}
+```
+
+#### CreateBucket
+```go
+func ExampleBucket_CreateBucket() {
+	var (
+		b   *Bucket
 		err error
 	)
 
-	db, err = iodb.New("./data")
-	if err != nil {
+	if b, err = exampleBucket.CreateBucket("my_bucket"); err != nil {
 		log.Fatal(err)
 	}
 
-	var users *iodb.Bucket
-	users, err = db.GetOrCreateBucket("users")
-	if err != nil {
+	fmt.Println("Bucket", b)
+}
+```
+
+#### GetOrCreateBucket
+```go
+func ExampleBucket_GetOrCreateBucket() {
+	var (
+		b   *Bucket
+		err error
+	)
+
+	if b, err = exampleBucket.GetOrCreateBucket("my_bucket"); err != nil {
 		log.Fatal(err)
 	}
 
-	var profile *iodb.File
-	profile, err = users.GetOrCreate("alice.json")
-	if err != nil {
+	fmt.Println("Bucket", b)
+}
+```
+
+#### Get
+```go
+func ExampleBucket_Get() {
+	var (
+		f  *File
+		ok bool
+	)
+
+	if f, ok = exampleBucket.Get("my_file"); ok {
+		log.Fatalf("my_file not found")
+	}
+
+	fmt.Println("File", f)
+}
+```
+
+#### Create
+```go
+func ExampleBucket_Create() {
+	var (
+		f   *File
+		err error
+	)
+
+	if f, err = exampleBucket.Create("my_file"); err != nil {
 		log.Fatal(err)
 	}
 
-	err = profile.Update(func(w io.Writer) (err error) {
-		_, err = w.Write([]byte(`{"name":"alice","active":true}`))
-		return err
-	})
-	if err != nil {
+	fmt.Println("File", f)
+}
+```
+
+#### GetOrCreate
+```go
+func ExampleBucket_GetOrCreate() {
+	var (
+		f   *File
+		err error
+	)
+
+	if f, err = exampleBucket.GetOrCreate("my_file"); err != nil {
 		log.Fatal(err)
 	}
 
-	err = profile.Read(func(r io.Reader) (err error) {
-		var b []byte
-		if b, err = io.ReadAll(r); err != nil {
-			return err
-		}
+	fmt.Println("File", f)
+}
+```
 
-		fmt.Println(string(b))
+### File
+#### Read
+```go
+func ExampleFile_Read() {
+	var err error
+	if err = exampleFile.Read(func(r io.Reader) (err error) {
 		return nil
-	})
-	if err != nil {
+	}); err != nil {
 		log.Fatal(err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
-	defer cancel()
+	fmt.Println("Read success")
+}
+```
 
-	go func() {
-		_ = profile.Append(func(w io.Writer) (err error) {
-			_, err = w.Write([]byte("\nupdated-at=now"))
-			return err
-		})
-	}()
-
-	_ = profile.StreamingRead(ctx, func(r io.Reader) (err error) {
-		var b = make([]byte, 256)
-		_, _ = r.Read(b)
+#### StreamingRead
+```go
+func ExampleFile_StreamingRead() {
+	var err error
+	if err = exampleFile.StreamingRead(context.Background(), func(r io.Reader) (err error) {
 		return nil
-	})
+	}); err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println("StreamingRead success")
+}
+```
+
+#### Update
+```go
+func ExampleFile_Update() {
+	var err error
+	if err = exampleFile.Update(func(w io.Writer) (err error) {
+		return nil
+	}); err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println("Update success")
+}
+```
+
+#### Append
+```go
+func ExampleFile_Append() {
+	var err error
+	if err = exampleFile.Append(func(w io.Writer) (err error) {
+		return nil
+	}); err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println("Append success")
 }
 ```
 
@@ -103,26 +185,6 @@ func main() {
 - `DB` is the root bucket.
 - `Bucket` represents a directory.
 - `File` represents one persisted value inside a bucket.
-
-## Why streambuf Matters
-
-`iodb` uses `streambuf` to provide file semantics that are stronger than plain `os.File` read/write coordination.
-
-- Append-only write behavior for active buffers
-- Multiple independent readers, each with its own cursor
-- File-backed reads share one underlying file descriptor, so many readers do not require one FD per reader
-- Tail-style readers that can wait for future bytes (`StreamingRead`)
-- Reader lifecycle and close signaling semantics (`streambuf.ErrIsClosed`)
-- Predictable behavior when rotating from old data to new data during `Update`
-
-In practice, this means you can safely mix:
-
-- Snapshot reads (`Read`)
-- Follow/tail reads (`StreamingRead`)
-- Concurrent appends (`Append`)
-- Atomic content replacement (`Update`)
-
-without manually building your own multi-reader stream coordination.
 
 ## API Overview
 
@@ -179,7 +241,7 @@ Exported validation errors:
 ## Testing
 
 ```bash
-go test ./...
+go test --race
 ```
 
 ## License

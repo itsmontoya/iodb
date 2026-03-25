@@ -1,11 +1,14 @@
 package iodb
 
 import (
+	"log"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
 )
+
+var exampleDB *DB
 
 func TestNew(t *testing.T) {
 	tests := []struct {
@@ -168,5 +171,12 @@ func TestNew(t *testing.T) {
 				test.assert(t, dbPath, db)
 			}
 		})
+	}
+}
+
+func ExampleNew() {
+	var err error
+	if exampleDB, err = New("path/to/dir"); err != nil {
+		log.Fatal(err)
 	}
 }
