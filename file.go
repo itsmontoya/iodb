@@ -4,7 +4,6 @@ import (
 	"context"
 	"io"
 	"os"
-	"path/filepath"
 	"sync"
 
 	"github.com/itsmontoya/streambuf"
@@ -155,8 +154,4 @@ func (f *File) getBuffer() (b *streambuf.Buffer, err error) {
 
 	f.b, err = streambuf.New(f.filepath())
 	return f.b, err
-}
-
-func (f *File) filepath() (out string) {
-	return filepath.Join(f.dir, f.key)
 }
