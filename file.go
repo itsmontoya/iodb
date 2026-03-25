@@ -48,6 +48,41 @@ func (f *File) Read(fn func(io.Reader) error) (err error) {
 	return fn(rc)
 }
 
+// StreamingRead opens a tail-style streaming reader for the current stream
+// buffer and passes it to fn.
+//
+// The reader is closed when fn returns or when ctx is canceled, whichever
+// happens first.
+//
+// While active, the reader can observe new data appended through Append against
+// the same active buffer.
+//
+// Like Read, if StreamingRead acquires a reader before or during Update, it may
+// continue reading from the previous buffer according to streambuf close
+// semantics. It does not automatically move to the new buffer created by Update.
+//
+// When no bytes are available and the streaming reader or backing buffer is
+// closed, streambuf returns streambuf.ErrIsClosed.
+func (f *File) StreamingRead(ctx context.Context, fn func(io.Reader) error) (err error) {
+	var b *streambuf.Buffer
+	if b, err = f.getBuffer(); err != nil {
+		return
+	}
+
+	var rc io.ReadCloser
+	if rc, err = b.StreamingReader(); err != nil {
+		return
+	}
+	defer rc.Close()
+
+	go func() {
+		<-ctx.Done()
+		_ = rc.Close()
+	}()
+
+	return fn(rc)
+}
+
 // Update writes file contents through fn and atomically replaces the file.
 //
 // Update replaces the on-disk file via rename, syncs the parent directory for
