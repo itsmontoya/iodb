@@ -2,8 +2,8 @@ package iodb
 
 import (
 	"os"
-	"path"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/itsmontoya/bst"
@@ -13,7 +13,7 @@ func newBucket(dir, name string) (out *Bucket, err error) {
 	var b Bucket
 	b.key = name
 	b.dir = dir
-	if b.buckets, b.files, err = getBucketsAndFiles(path.Join(dir, b.key)); err != nil {
+	if err = b.populateFromDirPath(); err != nil {
 		return nil, err
 	}
 
@@ -37,6 +37,10 @@ func (b *Bucket) GetBucket(key string) (out *Bucket, ok bool) {
 }
 
 func (b *Bucket) CreateBucket(key string) (out *Bucket, err error) {
+	if err = validateKey(key); err != nil {
+		return
+	}
+
 	var ok bool
 	b.mux.Lock()
 	defer b.mux.Unlock()
@@ -45,7 +49,7 @@ func (b *Bucket) CreateBucket(key string) (out *Bucket, err error) {
 	}
 
 	fullpath := filepath.Join(b.dir, key)
-	if err = os.Mkdir(fullpath, 0744); err != nil {
+	if err = os.MkdirAll(fullpath, 0755); err != nil {
 		return nil, err
 	}
 
@@ -73,6 +77,10 @@ func (b *Bucket) Get(key string) (out *File, ok bool) {
 }
 
 func (b *Bucket) Create(key string) (out *File, err error) {
+	if err = validateKey(key); err != nil {
+		return
+	}
+
 	var ok bool
 	b.mux.Lock()
 	defer b.mux.Unlock()
@@ -96,4 +104,37 @@ func (b *Bucket) GetOrCreate(key string) (out *File, err error) {
 	}
 
 	return b.Create(key)
+}
+
+func (b *Bucket) populateFromDirPath() (err error) {
+	var es []os.DirEntry
+	if es, err = os.ReadDir(b.filepath()); err != nil {
+		return err
+	}
+
+	for _, e := range es {
+		if err = b.insertEntry(e); err != nil {
+			return err
+		}
+	}
+
+	return
+}
+
+func (b *Bucket) insertEntry(e os.DirEntry) (err error) {
+	switch {
+	case e.IsDir():
+		var child *Bucket
+		if child, err = newBucket(b.filepath(), e.Name()); err != nil {
+			return
+		}
+
+		b.buckets.Insert(child)
+	case strings.Index(e.Name(), ".tmp_") == 0:
+		removeTempFile(b.filepath(), e.Name())
+	default:
+		b.files.Insert(newFile(b.filepath(), e.Name()))
+	}
+
+	return
 }

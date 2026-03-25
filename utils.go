@@ -1,43 +1,30 @@
 package iodb
 
 import (
+	"errors"
 	"io"
 	"os"
-
-	"github.com/itsmontoya/bst"
+	"path/filepath"
+	"regexp"
 )
 
-func getBucketsAndFiles(dir string) (bs bst.BST[*Bucket], fs bst.BST[*File], err error) {
-	var es []os.DirEntry
-	if es, err = os.ReadDir(dir); err != nil {
-		return nil, nil, err
-	}
+var isValidKey = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,254})$`)
 
-	for _, e := range es {
-		switch {
-		case e.IsDir():
-			var b *Bucket
-			if b, err = newBucket(dir, e); err != nil {
-				return
-			}
-
-			bs.Insert(b)
-		default:
-			fs.Insert(newFile(dir, e))
-		}
-	}
-
-	return
+func removeTempFile(dir, name string) {
+	fullpath := filepath.Join(dir, name)
+	_ = os.Remove(fullpath)
 }
 
-func tempFile(fn func(io.Writer) error) (filepath string, err error) {
+func tempFile(originalFilepath string, fn func(io.Writer) error) (tempPath string, err error) {
 	var tf *os.File
-	if tf, err = os.CreateTemp("", "sifty_"); err != nil {
+	dir := filepath.Dir(originalFilepath)
+	name := filepath.Base(originalFilepath)
+	if tf, err = os.CreateTemp(dir, ".tmp_"+name); err != nil {
 		return "", err
 	}
 
-	filepath = tf.Name()
-	err = fn(tf)
+	tempPath = tf.Name()
+	err = errors.Join(fn(tf), tf.Sync())
 	_ = tf.Close()
 
 	if err != nil {
@@ -45,5 +32,35 @@ func tempFile(fn func(io.Writer) error) (filepath string, err error) {
 		return "", err
 	}
 
-	return filepath, nil
+	return tempPath, nil
+}
+
+func touchFile(dir, key string) (err error) {
+	var f *os.File
+	fullpath := filepath.Join(dir, key)
+	if f, err = os.Create(fullpath); err != nil {
+		return err
+	}
+	_ = f.Close()
+	return nil
+}
+
+func syncDir(dir string) (err error) {
+	var d *os.File
+	if d, err = os.Open(dir); err != nil {
+		return err
+	}
+	defer d.Close()
+	return d.Sync()
+}
+
+func validateKey(key string) (err error) {
+	switch {
+	case key == "":
+		return ErrEmptyKey
+	case !isValidKey.MatchString(key):
+		return ErrInvalidKeyFormat
+	default:
+		return nil
+	}
 }
