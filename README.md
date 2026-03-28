@@ -44,7 +44,7 @@ func ExampleBucket_GetBucket() {
 		ok bool
 	)
 
-	if b, ok = exampleBucket.GetBucket("my_bucket"); ok {
+	if b, ok = exampleBucket.GetBucket("my_bucket"); !ok {
 		log.Fatalf("my_bucket not found")
 	}
 
@@ -92,7 +92,7 @@ func ExampleBucket_Get() {
 		ok bool
 	)
 
-	if f, ok = exampleBucket.Get("my_file"); ok {
+	if f, ok = exampleBucket.Get("my_file"); !ok {
 		log.Fatalf("my_file not found")
 	}
 
@@ -286,6 +286,12 @@ Exported validation errors:
 - `ErrEmptyKey`
 - `ErrInvalidKeyFormat`
 
+Temporary-file naming:
+
+- The `.tmp_` prefix is reserved for internal iodb temp files.
+- During bucket load, files prefixed with `.tmp_` are treated as stale temp
+  artifacts and removed.
+
 ## Concurrency and Update Semantics
 
 - Bucket lookups/creates are guarded by `sync.RWMutex`.
@@ -295,6 +301,10 @@ Exported validation errors:
 - Appends racing with `Update` can return `streambuf.ErrIsClosed`.
 - `Read` is snapshot-style and reaches EOF at current end.
 - `StreamingRead` is tail-style and waits for new bytes until closed/canceled.
+- `Bucket.Cursor` and `Bucket.ForEach` execute callbacks while holding the
+  bucket read lock; callbacks must not call mutating methods on that same
+  bucket (`CreateBucket`, `GetOrCreateBucket`, `Create`, `GetOrCreate`, or
+  `Delete`) to avoid deadlocks.
 
 ## Testing
 

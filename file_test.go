@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/itsmontoya/streambuf"
@@ -362,6 +363,21 @@ func TestFileStreamingRead(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestFileStreamingReadDoesNotLeakGoroutinesWhenCallbackReturns_Synctest(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var (
+			f   = newTestFile(t, "stream_no_leak.txt", "")
+			err error
+		)
+
+		if err = f.StreamingRead(context.Background(), func(r io.Reader) (err error) {
+			return nil
+		}); err != nil {
+			t.Fatalf("StreamingRead() error = %v", err)
+		}
+	})
 }
 
 func TestFileUpdate(t *testing.T) {

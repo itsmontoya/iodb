@@ -1,6 +1,7 @@
 package iodb
 
 import (
+	"context"
 	"errors"
 	"io"
 	"os"
@@ -62,5 +63,13 @@ func validateKey(key string) (err error) {
 		return ErrInvalidKeyFormat
 	default:
 		return nil
+	}
+}
+
+func closeOnDone(ctx context.Context, done chan struct{}, rc io.ReadCloser) {
+	select {
+	case <-ctx.Done():
+		_ = rc.Close()
+	case <-done:
 	}
 }

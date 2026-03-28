@@ -207,7 +207,7 @@ func TestBucketCreateBucket(t *testing.T) {
 					t.Fatalf("CreateBucket() key = %q, want %q", out.Key(), "child")
 				}
 
-				fullpath := filepath.Join(b.dir, "child")
+				fullpath := filepath.Join(b.filepath(), "child")
 				info, err := os.Stat(fullpath)
 				if err != nil {
 					t.Fatalf("stat created bucket path %q: %v", fullpath, err)
@@ -272,7 +272,7 @@ func TestBucketCreateBucket(t *testing.T) {
 					t.Fatalf("create bucket dir %q: %v", bucketDir, err)
 				}
 
-				if err = os.WriteFile(filepath.Join(parentDir, "taken"), []byte("x"), 0o644); err != nil {
+				if err = os.WriteFile(filepath.Join(bucketDir, "taken"), []byte("x"), 0o644); err != nil {
 					t.Fatalf("create conflicting file: %v", err)
 				}
 
@@ -308,7 +308,7 @@ func TestBucketCreateBucket(t *testing.T) {
 				}
 
 				b = newTestBucket(t, "root")
-				fullpath = filepath.Join(b.dir, "child")
+				fullpath = filepath.Join(b.filepath(), "child")
 				if err = os.Mkdir(fullpath, 0o755); err != nil {
 					t.Fatalf("create child bucket path %q: %v", fullpath, err)
 				}
@@ -366,6 +366,42 @@ func TestBucketCreateBucket(t *testing.T) {
 				test.assert(t, b, out)
 			}
 		})
+	}
+}
+
+func TestBucketCreateBucketNestedPath(t *testing.T) {
+	var (
+		root     = newTestBucket(t, "root", withChildBuckets("child"))
+		child    *Bucket
+		created  *Bucket
+		ok       bool
+		wantPath string
+		wrong    string
+		err      error
+	)
+
+	if child, ok = root.GetBucket("child"); !ok {
+		t.Fatal("GetBucket(child) ok = false, want true")
+	}
+
+	if created, err = child.CreateBucket("grand"); err != nil {
+		t.Fatalf("CreateBucket(grand) error = %v", err)
+	}
+
+	wantPath = filepath.Join(root.filepath(), "child", "grand")
+	if created.filepath() != wantPath {
+		t.Fatalf("created bucket filepath = %q, want %q", created.filepath(), wantPath)
+	}
+
+	if _, err = os.Stat(wantPath); err != nil {
+		t.Fatalf("stat nested bucket %q: %v", wantPath, err)
+	}
+
+	wrong = filepath.Join(root.filepath(), "grand")
+	if _, err = os.Stat(wrong); err == nil {
+		t.Fatalf("unexpected root-level bucket path exists: %q", wrong)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("stat root-level bucket %q error = %v, want %v", wrong, err, os.ErrNotExist)
 	}
 }
 
@@ -516,7 +552,7 @@ func TestBucketCreate(t *testing.T) {
 					t.Fatalf("Create() key = %q, want %q", out.Key(), "created.txt")
 				}
 
-				fullpath := filepath.Join(b.dir, "created.txt")
+				fullpath := filepath.Join(b.filepath(), "created.txt")
 				if _, err := os.Stat(fullpath); err != nil {
 					t.Fatalf("stat created file %q: %v", fullpath, err)
 				}
@@ -577,7 +613,7 @@ func TestBucketCreate(t *testing.T) {
 					t.Fatalf("create bucket dir %q: %v", bucketDir, err)
 				}
 
-				if err = os.Mkdir(filepath.Join(parentDir, "taken.txt"), 0o755); err != nil {
+				if err = os.Mkdir(filepath.Join(bucketDir, "taken.txt"), 0o755); err != nil {
 					t.Fatalf("create conflicting directory for touchFile: %v", err)
 				}
 
@@ -630,6 +666,42 @@ func TestBucketCreate(t *testing.T) {
 				test.assert(t, b, out)
 			}
 		})
+	}
+}
+
+func TestBucketCreateNestedFilePath(t *testing.T) {
+	var (
+		root     = newTestBucket(t, "root", withChildBuckets("child"))
+		child    *Bucket
+		created  *File
+		ok       bool
+		wantPath string
+		wrong    string
+		err      error
+	)
+
+	if child, ok = root.GetBucket("child"); !ok {
+		t.Fatal("GetBucket(child) ok = false, want true")
+	}
+
+	if created, err = child.Create("grand.txt"); err != nil {
+		t.Fatalf("Create(grand.txt) error = %v", err)
+	}
+
+	wantPath = filepath.Join(root.filepath(), "child", "grand.txt")
+	if created.filepath() != wantPath {
+		t.Fatalf("created file filepath = %q, want %q", created.filepath(), wantPath)
+	}
+
+	if _, err = os.Stat(wantPath); err != nil {
+		t.Fatalf("stat nested file %q: %v", wantPath, err)
+	}
+
+	wrong = filepath.Join(root.filepath(), "grand.txt")
+	if _, err = os.Stat(wrong); err == nil {
+		t.Fatalf("unexpected root-level file path exists: %q", wrong)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("stat root-level file %q error = %v, want %v", wrong, err, os.ErrNotExist)
 	}
 }
 
@@ -825,8 +897,8 @@ func TestBucketDelete(t *testing.T) {
 				return b
 			},
 			key:       "missing-on-disk.txt",
-			wantErr:   os.ErrNotExist,
-			expectErr: true,
+			wantErr:   nil,
+			expectErr: false,
 			assert: func(t *testing.T, b *Bucket, err error) {
 				var (
 					out *File
@@ -834,12 +906,9 @@ func TestBucketDelete(t *testing.T) {
 				)
 
 				t.Helper()
-				if !errors.Is(err, os.ErrNotExist) {
-					t.Fatalf("Delete() error = %v, want %v", err, os.ErrNotExist)
-				}
 
-				if out, ok = b.Get("missing-on-disk.txt"); !ok || out == nil {
-					t.Fatal("Delete() unexpectedly removed in-memory file index on remove error")
+				if out, ok = b.Get("missing-on-disk.txt"); ok || out != nil {
+					t.Fatal("Delete() unexpectedly found in-memory file index on remove")
 				}
 			},
 		},
@@ -973,7 +1042,7 @@ func TestBucketCursor(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			var (
-				b = test.initBucket(t)
+				b   = test.initBucket(t)
 				err error
 			)
 
@@ -1148,7 +1217,7 @@ func ExampleBucket_GetBucket() {
 		ok bool
 	)
 
-	if b, ok = exampleBucket.GetBucket("my_bucket"); ok {
+	if b, ok = exampleBucket.GetBucket("my_bucket"); !ok {
 		log.Fatalf("my_bucket not found")
 	}
 
@@ -1187,7 +1256,7 @@ func ExampleBucket_Get() {
 		ok bool
 	)
 
-	if f, ok = exampleBucket.Get("my_file"); ok {
+	if f, ok = exampleBucket.Get("my_file"); !ok {
 		log.Fatalf("my_file not found")
 	}
 

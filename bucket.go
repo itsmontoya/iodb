@@ -51,12 +51,12 @@ func (b *Bucket) CreateBucket(key string) (out *Bucket, err error) {
 		return out, nil
 	}
 
-	fullpath := filepath.Join(b.dir, key)
+	fullpath := filepath.Join(b.filepath(), key)
 	if err = os.MkdirAll(fullpath, 0755); err != nil {
 		return nil, err
 	}
 
-	if out, err = newBucket(b.dir, key); err != nil {
+	if out, err = newBucket(b.filepath(), key); err != nil {
 		return
 	}
 
@@ -94,11 +94,11 @@ func (b *Bucket) Create(key string) (out *File, err error) {
 		return out, nil
 	}
 
-	if err = touchFile(b.dir, key); err != nil {
+	if err = touchFile(b.filepath(), key); err != nil {
 		return nil, err
 	}
 
-	out = newFile(b.dir, key)
+	out = newFile(b.filepath(), key)
 	b.files.Insert(out)
 	return out, nil
 }
@@ -136,7 +136,12 @@ func (b *Bucket) Delete(key string) (err error) {
 	// Best-effort close: delete is authoritative here, so close errors are ignored and remove decides outcome.
 	_ = f.close()
 
-	if err = os.Remove(f.filepath()); err != nil {
+	err = os.Remove(f.filepath())
+	switch {
+	case err == nil:
+	// If the file doesn't exist, we can continue on with removing it from the lookup tree
+	case os.IsNotExist(err):
+	default:
 		return err
 	}
 
@@ -147,6 +152,14 @@ func (b *Bucket) Delete(key string) (err error) {
 }
 
 // Cursor executes fn with a read-only cursor over files in key order.
+//
+// fn executes while the bucket read lock is held.
+//
+// Callbacks must not call methods that may require a write lock on this same
+// bucket (for example: CreateBucket, GetOrCreateBucket, Create, GetOrCreate, or
+// Delete), because doing so can deadlock.
+//
+// The cursor is only valid for the duration of fn.
 func (b *Bucket) Cursor(fn func(*Cursor) error) (err error) {
 	b.mux.RLock()
 	defer b.mux.RUnlock()
@@ -156,6 +169,12 @@ func (b *Bucket) Cursor(fn func(*Cursor) error) (err error) {
 }
 
 // ForEach calls fn for each file in key order until fn returns an error.
+//
+// fn executes while the bucket read lock is held.
+//
+// Callbacks must not call methods that may require a write lock on this same
+// bucket (for example: CreateBucket, GetOrCreateBucket, Create, GetOrCreate, or
+// Delete), because doing so can deadlock.
 func (b *Bucket) ForEach(fn func(*File) error) (err error) {
 	b.mux.RLock()
 	defer b.mux.RUnlock()
@@ -183,6 +202,10 @@ func (b *Bucket) populateFromDirPath() (err error) {
 	return
 }
 
+// insertEntry loads a filesystem entry into the in-memory bucket indexes.
+//
+// Files prefixed with ".tmp_" are treated as internal temp-file artifacts and
+// are removed during load. The ".tmp_" prefix is reserved for iodb internals.
 func (b *Bucket) insertEntry(e os.DirEntry) (err error) {
 	switch {
 	case e.IsDir():

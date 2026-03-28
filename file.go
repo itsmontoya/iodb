@@ -74,11 +74,9 @@ func (f *File) StreamingRead(ctx context.Context, fn func(io.Reader) error) (err
 	}
 	defer rc.Close()
 
-	go func() {
-		<-ctx.Done()
-		_ = rc.Close()
-	}()
-
+	done := make(chan struct{})
+	defer close(done)
+	go closeOnDone(ctx, done, rc)
 	return fn(rc)
 }
 
