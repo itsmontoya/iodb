@@ -133,6 +133,18 @@ func ExampleBucket_GetOrCreate() {
 }
 ```
 
+#### Delete
+```go
+func ExampleBucket_Delete() {
+	var err error
+	if err = exampleBucket.Delete("my_file"); err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println("Deleted my_file")
+}
+```
+
 #### Cursor
 ```go
 func ExampleBucket_Cursor() {
@@ -247,6 +259,7 @@ func ExampleFile_Append() {
 - `Get(key string) (*File, bool)`
 - `Create(key string) (*File, error)`
 - `GetOrCreate(key string) (*File, error)`
+- `Delete(key string) error`
 - `Cursor(func(*Cursor) error) error`
 - `ForEach(func(*File) error) error`
 
