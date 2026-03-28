@@ -295,6 +295,10 @@ Exported validation errors:
 - Appends racing with `Update` can return `streambuf.ErrIsClosed`.
 - `Read` is snapshot-style and reaches EOF at current end.
 - `StreamingRead` is tail-style and waits for new bytes until closed/canceled.
+- `Bucket.Cursor` and `Bucket.ForEach` execute callbacks while holding the
+  bucket read lock; callbacks must not call mutating methods on that same
+  bucket (`CreateBucket`, `GetOrCreateBucket`, `Create`, `GetOrCreate`, or
+  `Delete`) to avoid deadlocks.
 
 ## Testing
 
