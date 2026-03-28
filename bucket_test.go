@@ -3,6 +3,7 @@ package iodb
 import (
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -703,6 +704,173 @@ func TestBucketGetOrCreate(t *testing.T) {
 	}
 }
 
+func TestBucketDelete(t *testing.T) {
+	tests := []struct {
+		name       string
+		initBucket func(t *testing.T) *Bucket
+		key        string
+		wantErr    error
+		expectErr  bool
+		assert     func(t *testing.T, b *Bucket, err error)
+	}{
+		{
+			name: "returns validation error for empty key",
+			initBucket: func(t *testing.T) *Bucket {
+				return newTestBucket(t, "root")
+			},
+			key:     "",
+			wantErr: ErrEmptyKey,
+		},
+		{
+			name: "returns validation error for invalid key format",
+			initBucket: func(t *testing.T) *Bucket {
+				return newTestBucket(t, "root")
+			},
+			key:     "bad/key",
+			wantErr: ErrInvalidKeyFormat,
+		},
+		{
+			name: "returns nil when key does not exist",
+			initBucket: func(t *testing.T) *Bucket {
+				return newTestBucket(t, "root", withFiles(map[string]string{
+					"existing.txt": "contents",
+				}))
+			},
+			key: "missing.txt",
+			assert: func(t *testing.T, b *Bucket, err error) {
+				var (
+					out *File
+					ok  bool
+				)
+
+				t.Helper()
+				if err != nil {
+					t.Fatalf("Delete() error = %v", err)
+				}
+
+				if out, ok = b.Get("existing.txt"); !ok || out == nil {
+					t.Fatal("Delete() unexpectedly mutated bucket for missing key")
+				}
+			},
+		},
+		{
+			name: "deletes existing file from disk and index",
+			initBucket: func(t *testing.T) *Bucket {
+				var (
+					b   *Bucket
+					f   *File
+					ok  bool
+					err error
+				)
+
+				b = newTestBucket(t, "root", withFiles(map[string]string{
+					"delete.txt": "contents",
+				}))
+
+				if f, ok = b.Get("delete.txt"); !ok {
+					t.Fatal("Get() ok = false for seeded file")
+				}
+
+				// Ensure the stream buffer is initialized before delete so Close() is exercised.
+				if err = f.Append(func(w io.Writer) error {
+					_, err = w.Write([]byte("more"))
+					return err
+				}); err != nil {
+					t.Fatalf("Append() error = %v", err)
+				}
+
+				return b
+			},
+			key: "delete.txt",
+			assert: func(t *testing.T, b *Bucket, err error) {
+				var (
+					ok       bool
+					fullpath string
+					statErr  error
+				)
+
+				t.Helper()
+				if err != nil {
+					t.Fatalf("Delete() error = %v", err)
+				}
+
+				if _, ok = b.Get("delete.txt"); ok {
+					t.Fatal("Get() ok = true, want false after delete")
+				}
+
+				fullpath = filepath.Join(b.filepath(), "delete.txt")
+				_, statErr = os.Stat(fullpath)
+				if !errors.Is(statErr, os.ErrNotExist) {
+					t.Fatalf("Stat(%q) error = %v, want %v", fullpath, statErr, os.ErrNotExist)
+				}
+			},
+		},
+		{
+			name: "returns error when indexed file is missing on disk",
+			initBucket: func(t *testing.T) *Bucket {
+				var (
+					b        *Bucket
+					fullpath string
+					err      error
+				)
+
+				b = newTestBucket(t, "root", withFiles(map[string]string{
+					"missing-on-disk.txt": "contents",
+				}))
+				fullpath = filepath.Join(b.filepath(), "missing-on-disk.txt")
+				if err = os.Remove(fullpath); err != nil {
+					t.Fatalf("remove seeded file %q: %v", fullpath, err)
+				}
+
+				return b
+			},
+			key:       "missing-on-disk.txt",
+			wantErr:   os.ErrNotExist,
+			expectErr: true,
+			assert: func(t *testing.T, b *Bucket, err error) {
+				var (
+					out *File
+					ok  bool
+				)
+
+				t.Helper()
+				if !errors.Is(err, os.ErrNotExist) {
+					t.Fatalf("Delete() error = %v, want %v", err, os.ErrNotExist)
+				}
+
+				if out, ok = b.Get("missing-on-disk.txt"); !ok || out == nil {
+					t.Fatal("Delete() unexpectedly removed in-memory file index on remove error")
+				}
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var (
+				b   = test.initBucket(t)
+				err error
+			)
+
+			err = b.Delete(test.key)
+
+			if test.wantErr != nil {
+				if !errors.Is(err, test.wantErr) {
+					t.Fatalf("Delete() error = %v, want %v", err, test.wantErr)
+				}
+			} else if test.expectErr && err == nil {
+				t.Fatal("Delete() error = nil, want non-nil error")
+			} else if !test.expectErr && err != nil {
+				t.Fatalf("Delete() error = %v", err)
+			}
+
+			if test.assert != nil {
+				test.assert(t, b, err)
+			}
+		})
+	}
+}
+
 func TestBucketCursor(t *testing.T) {
 	var errCursorSentinel = errors.New("cursor callback error")
 
@@ -1050,6 +1218,15 @@ func ExampleBucket_GetOrCreate() {
 	}
 
 	fmt.Println("File", f)
+}
+
+func ExampleBucket_Delete() {
+	var err error
+	if err = exampleBucket.Delete("my_file"); err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println("Deleted my_file")
 }
 
 func ExampleBucket_Cursor() {

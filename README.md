@@ -36,8 +36,7 @@ func ExampleNew() {
 }
 ```
 
-### Bucket
-#### GetBucket
+### Bucket.GetBucket
 ```go
 func ExampleBucket_GetBucket() {
 	var (
@@ -53,7 +52,7 @@ func ExampleBucket_GetBucket() {
 }
 ```
 
-#### CreateBucket
+### Bucket.CreateBucket
 ```go
 func ExampleBucket_CreateBucket() {
 	var (
@@ -69,7 +68,7 @@ func ExampleBucket_CreateBucket() {
 }
 ```
 
-#### GetOrCreateBucket
+### Bucket.GetOrCreateBucket
 ```go
 func ExampleBucket_GetOrCreateBucket() {
 	var (
@@ -85,7 +84,7 @@ func ExampleBucket_GetOrCreateBucket() {
 }
 ```
 
-#### Get
+### Bucket.Get
 ```go
 func ExampleBucket_Get() {
 	var (
@@ -101,7 +100,7 @@ func ExampleBucket_Get() {
 }
 ```
 
-#### Create
+### Bucket.Create
 ```go
 func ExampleBucket_Create() {
 	var (
@@ -117,7 +116,7 @@ func ExampleBucket_Create() {
 }
 ```
 
-#### GetOrCreate
+### Bucket.GetOrCreate
 ```go
 func ExampleBucket_GetOrCreate() {
 	var (
@@ -133,7 +132,19 @@ func ExampleBucket_GetOrCreate() {
 }
 ```
 
-#### Cursor
+### Bucket.Delete
+```go
+func ExampleBucket_Delete() {
+	var err error
+	if err = exampleBucket.Delete("my_file"); err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println("Deleted my_file")
+}
+```
+
+### Bucket.Cursor
 ```go
 func ExampleBucket_Cursor() {
 	var err error
@@ -155,7 +166,7 @@ func ExampleBucket_Cursor() {
 }
 ```
 
-#### ForEach
+### Bucket.ForEach
 ```go
 func ExampleBucket_ForEach() {
 	var err error
@@ -168,8 +179,7 @@ func ExampleBucket_ForEach() {
 }
 ```
 
-### File
-#### Read
+### File.Read
 ```go
 func ExampleFile_Read() {
 	var err error
@@ -183,7 +193,7 @@ func ExampleFile_Read() {
 }
 ```
 
-#### StreamingRead
+### File.StreamingRead
 ```go
 func ExampleFile_StreamingRead() {
 	var err error
@@ -197,7 +207,7 @@ func ExampleFile_StreamingRead() {
 }
 ```
 
-#### Update
+### File.Update
 ```go
 func ExampleFile_Update() {
 	var err error
@@ -211,7 +221,7 @@ func ExampleFile_Update() {
 }
 ```
 
-#### Append
+### File.Append
 ```go
 func ExampleFile_Append() {
 	var err error
@@ -247,6 +257,7 @@ func ExampleFile_Append() {
 - `Get(key string) (*File, bool)`
 - `Create(key string) (*File, error)`
 - `GetOrCreate(key string) (*File, error)`
+- `Delete(key string) error`
 - `Cursor(func(*Cursor) error) error`
 - `ForEach(func(*File) error) error`
 
