@@ -44,7 +44,7 @@ func ExampleBucket_GetBucket() {
 		ok bool
 	)
 
-	if b, ok = exampleBucket.GetBucket("my_bucket"); ok {
+	if b, ok = exampleBucket.GetBucket("my_bucket"); !ok {
 		log.Fatalf("my_bucket not found")
 	}
 
@@ -92,7 +92,7 @@ func ExampleBucket_Get() {
 		ok bool
 	)
 
-	if f, ok = exampleBucket.Get("my_file"); ok {
+	if f, ok = exampleBucket.Get("my_file"); !ok {
 		log.Fatalf("my_file not found")
 	}
 
