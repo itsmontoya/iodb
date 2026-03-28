@@ -51,12 +51,12 @@ func (b *Bucket) CreateBucket(key string) (out *Bucket, err error) {
 		return out, nil
 	}
 
-	fullpath := filepath.Join(b.dir, key)
+	fullpath := filepath.Join(b.filepath(), key)
 	if err = os.MkdirAll(fullpath, 0755); err != nil {
 		return nil, err
 	}
 
-	if out, err = newBucket(b.dir, key); err != nil {
+	if out, err = newBucket(b.filepath(), key); err != nil {
 		return
 	}
 
@@ -94,11 +94,11 @@ func (b *Bucket) Create(key string) (out *File, err error) {
 		return out, nil
 	}
 
-	if err = touchFile(b.dir, key); err != nil {
+	if err = touchFile(b.filepath(), key); err != nil {
 		return nil, err
 	}
 
-	out = newFile(b.dir, key)
+	out = newFile(b.filepath(), key)
 	b.files.Insert(out)
 	return out, nil
 }
