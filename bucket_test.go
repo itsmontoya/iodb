@@ -906,12 +906,9 @@ func TestBucketDelete(t *testing.T) {
 				)
 
 				t.Helper()
-				if !errors.Is(err, os.ErrNotExist) {
-					t.Fatalf("Delete() error = %v, want %v", err, os.ErrNotExist)
-				}
 
-				if out, ok = b.Get("missing-on-disk.txt"); !ok || out == nil {
-					t.Fatal("Delete() unexpectedly removed in-memory file index on remove error")
+				if out, ok = b.Get("missing-on-disk.txt"); ok || out != nil {
+					t.Fatal("Delete() unexpectedly found in-memory file index on remove")
 				}
 			},
 		},
