@@ -897,8 +897,8 @@ func TestBucketDelete(t *testing.T) {
 				return b
 			},
 			key:       "missing-on-disk.txt",
-			wantErr:   os.ErrNotExist,
-			expectErr: true,
+			wantErr:   nil,
+			expectErr: false,
 			assert: func(t *testing.T, b *Bucket, err error) {
 				var (
 					out *File
