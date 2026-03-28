@@ -703,6 +703,229 @@ func TestBucketGetOrCreate(t *testing.T) {
 	}
 }
 
+func TestBucketCursor(t *testing.T) {
+	var errCursorSentinel = errors.New("cursor callback error")
+
+	tests := []struct {
+		name       string
+		initBucket func(t *testing.T) *Bucket
+		wantErr    error
+		assert     func(t *testing.T, b *Bucket, err error)
+	}{
+		{
+			name: "iterates files in key order through cursor",
+			initBucket: func(t *testing.T) *Bucket {
+				return newTestBucket(t, "root", withFiles(map[string]string{
+					"b.txt": "b",
+					"a.txt": "a",
+					"c.txt": "c",
+				}))
+			},
+			assert: func(t *testing.T, b *Bucket, err error) {
+				var (
+					keys []string
+					f    *File
+					ok   bool
+				)
+
+				t.Helper()
+				if err != nil {
+					t.Fatalf("Cursor() error = %v", err)
+				}
+
+				if err = b.Cursor(func(c *Cursor) error {
+					if f, ok = c.First(); !ok {
+						t.Fatal("First() ok = false, want true")
+					}
+
+					keys = append(keys, f.Key())
+					for {
+						if f, ok = c.Next(); !ok {
+							break
+						}
+
+						keys = append(keys, f.Key())
+					}
+
+					return nil
+				}); err != nil {
+					t.Fatalf("Cursor() error = %v", err)
+				}
+
+				if len(keys) != 3 {
+					t.Fatalf("cursor keys length = %d, want 3", len(keys))
+				}
+
+				if keys[0] != "a.txt" || keys[1] != "b.txt" || keys[2] != "c.txt" {
+					t.Fatalf("cursor keys = %v, want [a.txt b.txt c.txt]", keys)
+				}
+			},
+		},
+		{
+			name: "returns cursor for empty bucket",
+			initBucket: func(t *testing.T) *Bucket {
+				return newTestBucket(t, "root")
+			},
+			assert: func(t *testing.T, b *Bucket, err error) {
+				var (
+					f  *File
+					ok bool
+				)
+
+				t.Helper()
+				if err != nil {
+					t.Fatalf("Cursor() error = %v", err)
+				}
+
+				if err = b.Cursor(func(c *Cursor) error {
+					if f, ok = c.First(); ok {
+						t.Fatalf("First() file = %#v, want nil with ok=false", f)
+					}
+					return nil
+				}); err != nil {
+					t.Fatalf("Cursor() error = %v", err)
+				}
+			},
+		},
+		{
+			name: "returns callback error",
+			initBucket: func(t *testing.T) *Bucket {
+				return newTestBucket(t, "root", withFiles(map[string]string{"a.txt": "a"}))
+			},
+			wantErr: errCursorSentinel,
+			assert: func(t *testing.T, b *Bucket, err error) {
+				t.Helper()
+				if !errors.Is(err, errCursorSentinel) {
+					t.Fatalf("Cursor() error = %v, want %v", err, errCursorSentinel)
+				}
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var (
+				b = test.initBucket(t)
+				err error
+			)
+
+			err = b.Cursor(func(c *Cursor) error {
+				if test.wantErr != nil {
+					return test.wantErr
+				}
+
+				return nil
+			})
+
+			if test.assert != nil {
+				test.assert(t, b, err)
+			}
+		})
+	}
+}
+
+func TestBucketForEach(t *testing.T) {
+	var errForEachSentinel = errors.New("foreach callback error")
+
+	tests := []struct {
+		name       string
+		initBucket func(t *testing.T) *Bucket
+		assert     func(t *testing.T, b *Bucket)
+	}{
+		{
+			name: "iterates files in key order",
+			initBucket: func(t *testing.T) *Bucket {
+				return newTestBucket(t, "root", withFiles(map[string]string{
+					"c.txt": "c",
+					"a.txt": "a",
+					"b.txt": "b",
+				}))
+			},
+			assert: func(t *testing.T, b *Bucket) {
+				var (
+					keys []string
+					err  error
+				)
+
+				t.Helper()
+				if err = b.ForEach(func(f *File) error {
+					keys = append(keys, f.Key())
+					return nil
+				}); err != nil {
+					t.Fatalf("ForEach() error = %v", err)
+				}
+
+				if len(keys) != 3 {
+					t.Fatalf("ForEach() keys length = %d, want 3", len(keys))
+				}
+
+				if keys[0] != "a.txt" || keys[1] != "b.txt" || keys[2] != "c.txt" {
+					t.Fatalf("ForEach() keys = %v, want [a.txt b.txt c.txt]", keys)
+				}
+			},
+		},
+		{
+			name: "stops on callback error",
+			initBucket: func(t *testing.T) *Bucket {
+				return newTestBucket(t, "root", withFiles(map[string]string{
+					"a.txt": "a",
+					"b.txt": "b",
+					"c.txt": "c",
+				}))
+			},
+			assert: func(t *testing.T, b *Bucket) {
+				var (
+					calls int
+					err   error
+				)
+
+				t.Helper()
+				err = b.ForEach(func(f *File) error {
+					calls++
+					return errForEachSentinel
+				})
+				if !errors.Is(err, errForEachSentinel) {
+					t.Fatalf("ForEach() error = %v, want %v", err, errForEachSentinel)
+				}
+				if calls != 1 {
+					t.Fatalf("ForEach() callback calls = %d, want 1", calls)
+				}
+			},
+		},
+		{
+			name: "does not call callback for empty bucket",
+			initBucket: func(t *testing.T) *Bucket {
+				return newTestBucket(t, "root")
+			},
+			assert: func(t *testing.T, b *Bucket) {
+				var (
+					calls int
+					err   error
+				)
+
+				t.Helper()
+				err = b.ForEach(func(f *File) error {
+					calls++
+					return nil
+				})
+				if err != nil {
+					t.Fatalf("ForEach() error = %v", err)
+				}
+				if calls != 0 {
+					t.Fatalf("ForEach() callback calls = %d, want 0", calls)
+				}
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			b := test.initBucket(t)
+			test.assert(t, b)
+		})
+	}
+}
+
 func newTestBucket(t *testing.T, name string, opts ...func(t *testing.T, bucketDir string)) (out *Bucket) {
 	var (
 		parentDir = t.TempDir()
@@ -827,4 +1050,33 @@ func ExampleBucket_GetOrCreate() {
 	}
 
 	fmt.Println("File", f)
+}
+
+func ExampleBucket_Cursor() {
+	var err error
+	if err = exampleBucket.Cursor(func(c *Cursor) error {
+		var (
+			f  *File
+			ok bool
+		)
+
+		if f, ok = c.First(); !ok {
+			return errors.New("empty bucket")
+		}
+
+		fmt.Println("First file", f)
+		return nil
+	}); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func ExampleBucket_ForEach() {
+	var err error
+	if err = exampleBucket.ForEach(func(f *File) error {
+		fmt.Println("File", f)
+		return nil
+	}); err != nil {
+		log.Fatal(err)
+	}
 }
