@@ -150,13 +150,9 @@ func (b *Bucket) Delete(key string) (err error) {
 func (b *Bucket) Cursor(fn func(*Cursor) error) (err error) {
 	b.mux.RLock()
 	defer b.mux.RUnlock()
-	var c Cursor
-	c.Cursor = b.files.Cursor()
-	if err = fn(&c); err != nil {
-		return err
-	}
-
-	return nil
+	c := makeCursor(b.files)
+	defer c.cleanup()
+	return fn(&c)
 }
 
 // ForEach calls fn for each file in key order until fn returns an error.
