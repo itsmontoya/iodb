@@ -106,6 +106,30 @@ func (b *Bucket) GetOrCreate(key string) (out *File, err error) {
 	return b.Create(key)
 }
 
+func (b *Bucket) Cursor(fn func(*Cursor) error) (err error) {
+	b.mux.RLock()
+	defer b.mux.RUnlock()
+	var c Cursor
+	c.Cursor = b.files.Cursor()
+	if err = fn(&c); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (b *Bucket) ForEach(fn func(*File) error) (err error) {
+	b.mux.RLock()
+	defer b.mux.RUnlock()
+	for _, f := range b.files {
+		if err = fn(f); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (b *Bucket) populateFromDirPath() (err error) {
 	var es []os.DirEntry
 	if es, err = os.ReadDir(b.filepath()); err != nil {

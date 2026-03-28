@@ -1,4 +1,4 @@
-github.com/itsmontoya/bst v0.10.1 h1:g0g89RcytnyOyKCpQkKKJ8JOGYNASURdGp9N1Qlg4I0=
-github.com/itsmontoya/bst v0.10.1/go.mod h1:0Znz4GJzZNmKOPTmx9Gr/CJwyDAsXUrxk0xS4rxfK+M=
+github.com/itsmontoya/bst v1.0.0 h1:82pf2JHUYiyV3DvlH9jjfISEwbDEQwXIobwhaEgewAk=
+github.com/itsmontoya/bst v1.0.0/go.mod h1:0Znz4GJzZNmKOPTmx9Gr/CJwyDAsXUrxk0xS4rxfK+M=
 github.com/itsmontoya/streambuf v0.7.0 h1:XEUypnMuiVni+mFoeGSCsHzrI+1Iui1QGPZDZ6feoRw=
 github.com/itsmontoya/streambuf v0.7.0/go.mod h1:ywGe7nXRwp7+6i0kEAblzXJyybm2lSaP4PiB/KZA+HY=
