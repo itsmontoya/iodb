@@ -7,6 +7,7 @@ type entry struct {
 	dir string
 }
 
+// Key returns the entry key used as the on-disk file or directory name.
 func (e entry) Key() (out string) {
 	return e.key
 }
