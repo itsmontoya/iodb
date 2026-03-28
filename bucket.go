@@ -106,6 +106,39 @@ func (b *Bucket) GetOrCreate(key string) (out *File, err error) {
 	return b.Create(key)
 }
 
+// Delete removes key from the bucket if present.
+//
+// Delete validates key, closes the file buffer when initialized, removes the
+// file from disk, and then removes the key from the in-memory index.
+//
+// If key is not present, Delete returns nil.
+func (b *Bucket) Delete(key string) (err error) {
+	if err = validateKey(key); err != nil {
+		return
+	}
+
+	var (
+		ok bool
+		f  *File
+	)
+
+	if f, ok = b.Get(key); !ok {
+		return nil
+	}
+
+	// Best-effort close: delete is authoritative here, so close errors are ignored and remove decides outcome.
+	_ = f.close()
+
+	if err = os.Remove(f.filepath()); err != nil {
+		return err
+	}
+
+	b.mux.Lock()
+	defer b.mux.Unlock()
+	b.files.Remove(key)
+	return nil
+}
+
 func (b *Bucket) Cursor(fn func(*Cursor) error) (err error) {
 	b.mux.RLock()
 	defer b.mux.RUnlock()
