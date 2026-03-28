@@ -152,6 +152,14 @@ func (b *Bucket) Delete(key string) (err error) {
 }
 
 // Cursor executes fn with a read-only cursor over files in key order.
+//
+// fn executes while the bucket read lock is held.
+//
+// Callbacks must not call methods that may require a write lock on this same
+// bucket (for example: CreateBucket, GetOrCreateBucket, Create, GetOrCreate, or
+// Delete), because doing so can deadlock.
+//
+// The cursor is only valid for the duration of fn.
 func (b *Bucket) Cursor(fn func(*Cursor) error) (err error) {
 	b.mux.RLock()
 	defer b.mux.RUnlock()
@@ -161,6 +169,12 @@ func (b *Bucket) Cursor(fn func(*Cursor) error) (err error) {
 }
 
 // ForEach calls fn for each file in key order until fn returns an error.
+//
+// fn executes while the bucket read lock is held.
+//
+// Callbacks must not call methods that may require a write lock on this same
+// bucket (for example: CreateBucket, GetOrCreateBucket, Create, GetOrCreate, or
+// Delete), because doing so can deadlock.
 func (b *Bucket) ForEach(fn func(*File) error) (err error) {
 	b.mux.RLock()
 	defer b.mux.RUnlock()
