@@ -202,6 +202,10 @@ func (b *Bucket) populateFromDirPath() (err error) {
 	return
 }
 
+// insertEntry loads a filesystem entry into the in-memory bucket indexes.
+//
+// Files prefixed with ".tmp_" are treated as internal temp-file artifacts and
+// are removed during load. The ".tmp_" prefix is reserved for iodb internals.
 func (b *Bucket) insertEntry(e os.DirEntry) (err error) {
 	switch {
 	case e.IsDir():

@@ -286,6 +286,12 @@ Exported validation errors:
 - `ErrEmptyKey`
 - `ErrInvalidKeyFormat`
 
+Temporary-file naming:
+
+- The `.tmp_` prefix is reserved for internal iodb temp files.
+- During bucket load, files prefixed with `.tmp_` are treated as stale temp
+  artifacts and removed.
+
 ## Concurrency and Update Semantics
 
 - Bucket lookups/creates are guarded by `sync.RWMutex`.
