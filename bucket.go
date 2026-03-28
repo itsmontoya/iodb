@@ -136,7 +136,12 @@ func (b *Bucket) Delete(key string) (err error) {
 	// Best-effort close: delete is authoritative here, so close errors are ignored and remove decides outcome.
 	_ = f.close()
 
-	if err = os.Remove(f.filepath()); err != nil {
+	err = os.Remove(f.filepath())
+	switch {
+	case err == nil:
+	// If the file doesn't exist, we can continue on with removing it from the lookup tree
+	case os.IsNotExist(err):
+	default:
 		return err
 	}
 
