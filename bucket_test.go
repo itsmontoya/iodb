@@ -1220,6 +1220,15 @@ func ExampleBucket_GetOrCreate() {
 	fmt.Println("File", f)
 }
 
+func ExampleBucket_Delete() {
+	var err error
+	if err = exampleBucket.Delete("my_file"); err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println("Deleted my_file")
+}
+
 func ExampleBucket_Cursor() {
 	var err error
 	if err = exampleBucket.Cursor(func(c *Cursor) error {
