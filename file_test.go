@@ -9,8 +9,8 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/itsmontoya/streambuf"
@@ -365,33 +365,19 @@ func TestFileStreamingRead(t *testing.T) {
 	}
 }
 
-func TestFileStreamingReadDoesNotLeakGoroutinesWhenCallbackReturns(t *testing.T) {
-	var (
-		f             = newTestFile(t, "stream_no_leak.txt", "")
-		before        int
-		after         int
-		iterations    = 64
-		allowedGrowth = 12
-		i             int
-		err           error
-	)
+func TestFileStreamingReadDoesNotLeakGoroutinesWhenCallbackReturns_Synctest(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var (
+			f   = newTestFile(t, "stream_no_leak.txt", "")
+			err error
+		)
 
-	before = runtime.NumGoroutine()
-
-	for i = 0; i < iterations; i++ {
 		if err = f.StreamingRead(context.Background(), func(r io.Reader) (err error) {
 			return nil
 		}); err != nil {
 			t.Fatalf("StreamingRead() error = %v", err)
 		}
-	}
-
-	time.Sleep(25 * time.Millisecond)
-	after = runtime.NumGoroutine()
-
-	if after > before+allowedGrowth {
-		t.Fatalf("goroutine count grew from %d to %d (allowed growth %d)", before, after, allowedGrowth)
-	}
+	})
 }
 
 func TestFileUpdate(t *testing.T) {
