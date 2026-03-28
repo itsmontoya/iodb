@@ -126,6 +126,18 @@ func (f *File) Append(fn func(io.Writer) error) (err error) {
 	return nil
 }
 
+func (f *File) close() (err error) {
+	f.tmux.Lock()
+	defer f.tmux.Unlock()
+	if f.b == nil {
+		return nil
+	}
+
+	b := f.b
+	f.b = nil
+	return b.Close()
+}
+
 func (f *File) updateFromTemp(tempPath string) (err error) {
 	f.tmux.Lock()
 	defer f.tmux.Unlock()
