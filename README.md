@@ -133,6 +133,41 @@ func ExampleBucket_GetOrCreate() {
 }
 ```
 
+#### Cursor
+```go
+func ExampleBucket_Cursor() {
+	var err error
+	if err = exampleBucket.Cursor(func(c *Cursor) error {
+		var (
+			f  *File
+			ok bool
+		)
+
+		if f, ok = c.First(); !ok {
+			return errors.New("empty bucket")
+		}
+
+		fmt.Println("First file", f)
+		return nil
+	}); err != nil {
+		log.Fatal(err)
+	}
+}
+```
+
+#### ForEach
+```go
+func ExampleBucket_ForEach() {
+	var err error
+	if err = exampleBucket.ForEach(func(f *File) error {
+		fmt.Println("File", f)
+		return nil
+	}); err != nil {
+		log.Fatal(err)
+	}
+}
+```
+
 ### File
 #### Read
 ```go
@@ -212,6 +247,8 @@ func ExampleFile_Append() {
 - `Get(key string) (*File, bool)`
 - `Create(key string) (*File, error)`
 - `GetOrCreate(key string) (*File, error)`
+- `Cursor(func(*Cursor) error) error`
+- `ForEach(func(*File) error) error`
 
 ### File
 
