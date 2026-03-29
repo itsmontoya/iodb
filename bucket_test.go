@@ -11,6 +11,8 @@ import (
 	"testing"
 )
 
+// Examples in this repository are documentation-focused snippets, not
+// executable output assertions.
 var exampleBucket *Bucket
 
 func TestNewBucket(t *testing.T) {
