@@ -11,6 +11,12 @@ import (
 
 var isValidKey = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,254})$`)
 
+// removeTempFile removes a stale iodb temp artifact by name.
+//
+// iodb writes temp artifacts as files (via os.CreateTemp + tempName), and does
+// not create temp directories as part of normal operation. For that reason this
+// helper intentionally uses os.Remove and ignores errors as best-effort cleanup
+// during load.
 func removeTempFile(dir, name string) {
 	fullpath := filepath.Join(dir, name)
 	_ = os.Remove(fullpath)
