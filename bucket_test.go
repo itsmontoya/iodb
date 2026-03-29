@@ -968,6 +968,78 @@ func TestBucketDelete(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "returns error when file cannot be deleted due to directory permissions",
+			initBucket: func(t *testing.T) *Bucket {
+				var (
+					b         *Bucket
+					bucketDir string
+					probePath string
+					probeErr  error
+					err       error
+				)
+
+				if runtime.GOOS == "windows" {
+					t.Skip("directory permission semantics differ on windows")
+				}
+
+				b = newTestBucket(t, "root", withFiles(map[string]string{
+					"no-delete.txt": "contents",
+					"probe.txt":     "probe",
+				}))
+				bucketDir = b.filepath()
+				probePath = filepath.Join(bucketDir, "probe.txt")
+
+				if err = os.Chmod(bucketDir, 0o555); err != nil {
+					t.Fatalf("chmod bucket dir %q: %v", bucketDir, err)
+				}
+
+				t.Cleanup(func() {
+					_ = os.Chmod(bucketDir, 0o755)
+				})
+
+				// Some environments (for example elevated privilege contexts) may
+				// still allow deletes despite directory mode. Validate behavior
+				// before asserting permission failures.
+				probeErr = os.Remove(probePath)
+				if probeErr == nil {
+					t.Skip("environment allows delete in read-only directory; skipping permission-denied case")
+				}
+
+				if !errors.Is(probeErr, os.ErrPermission) {
+					t.Skipf("unexpected probe delete error %v; skipping permission-denied case", probeErr)
+				}
+
+				return b
+			},
+			key:       "no-delete.txt",
+			expectErr: true,
+			assert: func(t *testing.T, b *Bucket, err error) {
+				var (
+					out      *File
+					ok       bool
+					fullpath string
+					statErr  error
+				)
+
+				t.Helper()
+				if err == nil {
+					t.Fatal("Delete() error = nil, want non-nil permission error")
+				}
+				if !errors.Is(err, os.ErrPermission) {
+					t.Fatalf("Delete() error = %v, want permission error", err)
+				}
+
+				if out, ok = b.Get("no-delete.txt"); !ok || out == nil {
+					t.Fatal("Delete() unexpectedly removed file from in-memory index on permission error")
+				}
+
+				fullpath = filepath.Join(b.filepath(), "no-delete.txt")
+				if _, statErr = os.Stat(fullpath); statErr != nil {
+					t.Fatalf("Stat(%q) error = %v, want nil", fullpath, statErr)
+				}
+			},
+		},
 	}
 
 	for _, test := range tests {
