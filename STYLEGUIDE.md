@@ -380,6 +380,11 @@ i++
 * Keep setup explicit.
 * Avoid clever test abstractions.
 
+## GoDoc Examples
+
+* Prefer documentation-only example snippets over executable `// Output:` examples.
+* Use executable output assertions only when the output itself is the behavior being documented.
+
 ```go
 func Test_Buffer_Write(t *testing.T) {
     type testcase struct {

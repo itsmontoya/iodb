@@ -16,6 +16,8 @@ import (
 	"github.com/itsmontoya/streambuf"
 )
 
+// Examples in this repository are documentation-focused snippets, not
+// executable output assertions.
 var exampleFile *File
 
 func TestFileKey(t *testing.T) {
