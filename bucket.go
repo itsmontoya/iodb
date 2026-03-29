@@ -204,10 +204,15 @@ func (b *Bucket) populateFromDirPath() (err error) {
 
 // insertEntry loads a filesystem entry into the in-memory bucket indexes.
 //
-// Files prefixed with ".tmp_" are treated as internal temp-file artifacts and
-// are removed during load. The ".tmp_" prefix is reserved for iodb internals.
+// Entries prefixed with ".tmp_" are treated as internal temp artifacts and are
+// removed during load. The ".tmp_" prefix is reserved for iodb internals.
 func (b *Bucket) insertEntry(e os.DirEntry) (err error) {
 	switch {
+	case strings.Index(e.Name(), ".tmp_") == 0:
+		// Encountered a temporary file that was not cleaned up previously, remove
+		removeTempFile(b.filepath(), e.Name())
+	case validateKey(e.Name()) != nil:
+		// Avoid loading invalid keys (e.g. hidden files and directories), NO-OP
 	case e.IsDir():
 		var child *Bucket
 		if child, err = newBucket(b.filepath(), e.Name()); err != nil {
@@ -215,8 +220,6 @@ func (b *Bucket) insertEntry(e os.DirEntry) (err error) {
 		}
 
 		b.buckets.Insert(child)
-	case strings.Index(e.Name(), ".tmp_") == 0:
-		removeTempFile(b.filepath(), e.Name())
 	default:
 		b.files.Insert(newFile(b.filepath(), e.Name()))
 	}
