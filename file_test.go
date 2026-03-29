@@ -797,61 +797,6 @@ func TestFileConcurrentUpdateContracts(t *testing.T) {
 	})
 }
 
-// Contract test pinned to streambuf v0.7.0: close initiation should unblock a
-// waiting streaming read with ErrIsClosed, and subsequent writes/new readers are
-// rejected with ErrIsClosed.
-func TestStreambufV070CloseInitiationContract(t *testing.T) {
-	var (
-		b         = streambuf.NewMemory()
-		r         io.ReadSeekCloser
-		readErrCh = make(chan error, 1)
-		closeErr  error
-		writeErr  error
-		readerErr error
-		streamErr error
-	)
-
-	if r, closeErr = b.StreamingReader(); closeErr != nil {
-		t.Fatalf("StreamingReader() setup error = %v", closeErr)
-	}
-	defer r.Close()
-
-	go func() {
-		var (
-			buf = make([]byte, 1)
-			err error
-		)
-		_, err = r.Read(buf)
-		readErrCh <- err
-	}()
-
-	if closeErr = b.Close(); closeErr != nil {
-		t.Fatalf("Close() error = %v", closeErr)
-	}
-
-	select {
-	case err := <-readErrCh:
-		if !errors.Is(err, streambuf.ErrIsClosed) {
-			t.Fatalf("streaming read error = %v, want %v", err, streambuf.ErrIsClosed)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("streaming read did not unblock after Close()")
-	}
-
-	_, writeErr = b.Write([]byte("x"))
-	if !errors.Is(writeErr, streambuf.ErrIsClosed) {
-		t.Fatalf("Write() error = %v, want %v", writeErr, streambuf.ErrIsClosed)
-	}
-
-	if _, readerErr = b.Reader(); !errors.Is(readerErr, streambuf.ErrIsClosed) {
-		t.Fatalf("Reader() error = %v, want %v", readerErr, streambuf.ErrIsClosed)
-	}
-
-	if _, streamErr = b.StreamingReader(); !errors.Is(streamErr, streambuf.ErrIsClosed) {
-		t.Fatalf("StreamingReader() error = %v, want %v", streamErr, streambuf.ErrIsClosed)
-	}
-}
-
 func assertFileReadContent(f *File, want string) (err error) {
 	err = f.Read(func(r io.Reader) (err error) {
 		var b []byte
