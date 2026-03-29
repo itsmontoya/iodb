@@ -103,8 +103,10 @@ func TestNewBucketRemovesTempFilesDuringPopulate(t *testing.T) {
 	var (
 		parentDir = t.TempDir()
 		rootDir   = filepath.Join(parentDir, "root")
-		tempName  = ".tmp_transient"
+		tempName  = ".tmp_user_cache"
 		tempPath  = filepath.Join(rootDir, tempName)
+		keepName  = "persist.txt"
+		keepPath  = filepath.Join(rootDir, keepName)
 		out       *Bucket
 		ok        bool
 		err       error
@@ -118,6 +120,10 @@ func TestNewBucketRemovesTempFilesDuringPopulate(t *testing.T) {
 		t.Fatalf("create temp file %q: %v", tempPath, err)
 	}
 
+	if err = os.WriteFile(keepPath, []byte("keep"), 0o644); err != nil {
+		t.Fatalf("create keep file %q: %v", keepPath, err)
+	}
+
 	if out, err = newBucket(parentDir, "root"); err != nil {
 		t.Fatalf("newBucket(%q, %q) error = %v", parentDir, "root", err)
 	}
@@ -128,6 +134,56 @@ func TestNewBucketRemovesTempFilesDuringPopulate(t *testing.T) {
 
 	if _, ok = out.Get(tempName); ok {
 		t.Fatalf("Get(%q) returned ok=true, want false", tempName)
+	}
+
+	if _, err = os.Stat(keepPath); err != nil {
+		t.Fatalf("keep file stat %q error = %v", keepPath, err)
+	}
+
+	if _, ok = out.Get(keepName); !ok {
+		t.Fatalf("Get(%q) returned ok=false, want true", keepName)
+	}
+}
+
+func TestNewBucketRemovesTempFilesInChildBucketsDuringPopulate(t *testing.T) {
+	var (
+		parentDir = t.TempDir()
+		rootDir   = filepath.Join(parentDir, "root")
+		childDir  = filepath.Join(rootDir, "child")
+		tempName  = ".tmp_stale_child_file"
+		tempPath  = filepath.Join(childDir, tempName)
+		out       *Bucket
+		child     *Bucket
+		ok        bool
+		err       error
+	)
+
+	if err = os.Mkdir(rootDir, 0o755); err != nil {
+		t.Fatalf("create root dir %q: %v", rootDir, err)
+	}
+
+	if err = os.Mkdir(childDir, 0o755); err != nil {
+		t.Fatalf("create child dir %q: %v", childDir, err)
+	}
+
+	if err = os.WriteFile(tempPath, []byte("temp"), 0o644); err != nil {
+		t.Fatalf("create temp file %q: %v", tempPath, err)
+	}
+
+	if out, err = newBucket(parentDir, "root"); err != nil {
+		t.Fatalf("newBucket(%q, %q) error = %v", parentDir, "root", err)
+	}
+
+	if _, err = os.Stat(tempPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("child temp file still exists or unexpected stat error, got: %v", err)
+	}
+
+	if child, ok = out.GetBucket("child"); !ok {
+		t.Fatal("GetBucket(\"child\") returned ok=false, want true")
+	}
+
+	if _, ok = child.Get(tempName); ok {
+		t.Fatalf("child Get(%q) returned ok=true, want false", tempName)
 	}
 }
 
@@ -909,6 +965,78 @@ func TestBucketDelete(t *testing.T) {
 
 				if out, ok = b.Get("missing-on-disk.txt"); ok || out != nil {
 					t.Fatal("Delete() unexpectedly found in-memory file index on remove")
+				}
+			},
+		},
+		{
+			name: "returns error when file cannot be deleted due to directory permissions",
+			initBucket: func(t *testing.T) *Bucket {
+				var (
+					b         *Bucket
+					bucketDir string
+					probePath string
+					probeErr  error
+					err       error
+				)
+
+				if runtime.GOOS == "windows" {
+					t.Skip("directory permission semantics differ on windows")
+				}
+
+				b = newTestBucket(t, "root", withFiles(map[string]string{
+					"no-delete.txt": "contents",
+					"probe.txt":     "probe",
+				}))
+				bucketDir = b.filepath()
+				probePath = filepath.Join(bucketDir, "probe.txt")
+
+				if err = os.Chmod(bucketDir, 0o555); err != nil {
+					t.Fatalf("chmod bucket dir %q: %v", bucketDir, err)
+				}
+
+				t.Cleanup(func() {
+					_ = os.Chmod(bucketDir, 0o755)
+				})
+
+				// Some environments (for example elevated privilege contexts) may
+				// still allow deletes despite directory mode. Validate behavior
+				// before asserting permission failures.
+				probeErr = os.Remove(probePath)
+				if probeErr == nil {
+					t.Skip("environment allows delete in read-only directory; skipping permission-denied case")
+				}
+
+				if !errors.Is(probeErr, os.ErrPermission) {
+					t.Skipf("unexpected probe delete error %v; skipping permission-denied case", probeErr)
+				}
+
+				return b
+			},
+			key:       "no-delete.txt",
+			expectErr: true,
+			assert: func(t *testing.T, b *Bucket, err error) {
+				var (
+					out      *File
+					ok       bool
+					fullpath string
+					statErr  error
+				)
+
+				t.Helper()
+				if err == nil {
+					t.Fatal("Delete() error = nil, want non-nil permission error")
+				}
+				if !errors.Is(err, os.ErrPermission) {
+					t.Fatalf("Delete() error = %v, want permission error", err)
+				}
+
+				if out, ok = b.Get("no-delete.txt"); !ok || out == nil {
+					t.Fatal("Delete() unexpectedly removed file from in-memory index on permission error")
+				}
+
+				fullpath = filepath.Join(b.filepath(), "no-delete.txt")
+				if _, statErr = os.Stat(fullpath); statErr != nil {
+					t.Fatalf("Stat(%q) error = %v, want nil", fullpath, statErr)
 				}
 			},
 		},
