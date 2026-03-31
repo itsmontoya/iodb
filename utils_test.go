@@ -48,3 +48,36 @@ func TestTempFile(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateKey(t *testing.T) {
+	tests := []struct {
+		name    string
+		key     string
+		wantErr error
+	}{
+		{
+			name:    "accepts rfc3339 style log filename",
+			key:     "2026-03-30T21:53:39-07:00.log",
+			wantErr: nil,
+		},
+		{
+			name:    "rejects empty key",
+			key:     "",
+			wantErr: ErrEmptyKey,
+		},
+		{
+			name:    "rejects path separator",
+			key:     "bad/key.log",
+			wantErr: ErrInvalidKeyFormat,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := validateKey(test.key)
+			if !errors.Is(err, test.wantErr) {
+				t.Fatalf("validateKey() error = %v, want %v", err, test.wantErr)
+			}
+		})
+	}
+}
