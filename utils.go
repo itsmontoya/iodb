@@ -9,7 +9,7 @@ import (
 	"regexp"
 )
 
-var isValidKey = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,254})$`)
+var isValidKey = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9._:-]{0,254})$`)
 
 // removeTempFile removes a stale iodb temp artifact by name.
 //
